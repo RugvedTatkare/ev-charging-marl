@@ -378,6 +378,10 @@ def live_simulation() -> None:
             # Run this episode to completion synchronously; the current state is retained.
             for _ in range(env_local.max_steps - env_local.time):
                 advance_one_step()
+    step_now = False
+    with controls[1]:
+        # A click reruns this fragment, so record a single-step request here.
+        pass
     with controls[3]:
         st.caption("Play advances the city automatically. Step once is useful for observing a single decision cycle.")
 
