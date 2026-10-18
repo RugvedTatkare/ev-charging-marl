@@ -16,6 +16,8 @@ class EV:
     travel_distance: float = 0.0
     total_cost: float = 0.0
     completed_charges: int = 0
+    route: list[tuple[float, float]] = field(default_factory=list)
+    route_index: int = 0
 
 
 @dataclass
@@ -37,17 +39,38 @@ class EVChargingEnvironment:
         self.width, self.height = 100.0, 100.0
         self.max_steps = max_steps
         self.time = 0
+        # The map is a small road grid. Stations sit directly on intersections,
+        # so route planning and the rendered streets use the same geometry.
+        self.road_x = [10.0, 30.0, 50.0, 70.0, 90.0]
+        self.road_y = [10.0, 30.0, 50.0, 70.0, 90.0]
+        self.road_nodes = [(x, y) for y in self.road_y for x in self.road_x]
+        self.road_graph = {node: [] for node in self.road_nodes}
+        for y in self.road_y:
+            for left, right in zip(self.road_x[:-1], self.road_x[1:]):
+                self.road_graph[(left, y)].append(((right, y), right - left))
+                self.road_graph[(right, y)].append(((left, y), right - left))
+        for x in self.road_x:
+            for lower, upper in zip(self.road_y[:-1], self.road_y[1:]):
+                self.road_graph[(x, lower)].append(((x, upper), upper - lower))
+                self.road_graph[(x, upper)].append(((x, lower), upper - lower))
+
         self.stations = [
-            ChargingStation(0, 20, 25, 1.0),
-            ChargingStation(1, 75, 30, 1.5),
-            ChargingStation(2, 50, 80, 0.8),
+            ChargingStation(0, 30, 30, 1.0),
+            ChargingStation(1, 70, 30, 1.5),
+            ChargingStation(2, 50, 90, 0.8),
         ]
-        self.evs = [
-            EV(i, float(self.rng.uniform(5, 95)),
-               float(self.rng.uniform(5, 95)),
-               float(self.rng.uniform(15, 65)))
-            for i in range(num_evs)
-        ]
+        self.evs = []
+        road_edges = []
+        for node, edges in self.road_graph.items():
+            for neighbor, _ in edges:
+                if node < neighbor:
+                    road_edges.append((node, neighbor))
+        for i in range(num_evs):
+            a, b = road_edges[int(self.rng.integers(0, len(road_edges)))]
+            fraction = float(self.rng.uniform(0.12, 0.88))
+            x = a[0] + (b[0] - a[0]) * fraction
+            y = a[1] + (b[1] - a[1]) * fraction
+            self.evs.append(EV(i, x, y, float(self.rng.uniform(15, 65))))
         self.average_battery_history = []
         self.total_cost_history = []
         self.queue_history = [[] for _ in self.stations]
@@ -57,6 +80,43 @@ class EVChargingEnvironment:
     @staticmethod
     def distance_xy(x, y, station):
         return float(np.hypot(x - station.x, y - station.y))
+
+    def _nearest_road_node(self, x, y):
+        return min(self.road_nodes, key=lambda node: np.hypot(node[0] - x, node[1] - y))
+
+    def _shortest_road_path(self, start, goal):
+        # Dijkstra over the small road graph; returns ordered intersections.
+        distances = {node: float("inf") for node in self.road_nodes}
+        previous = {}
+        distances[start] = 0.0
+        pending = set(self.road_nodes)
+        while pending:
+            current = min(pending, key=lambda node: distances[node])
+            pending.remove(current)
+            if current == goal or distances[current] == float("inf"):
+                break
+            for neighbor, weight in self.road_graph[current]:
+                candidate = distances[current] + weight
+                if candidate < distances[neighbor]:
+                    distances[neighbor] = candidate
+                    previous[neighbor] = current
+        path = [goal]
+        while path[-1] != start:
+            path.append(previous[path[-1]])
+        path.reverse()
+        return path
+
+    def _assign_road_route(self, ev, station):
+        start = self._nearest_road_node(ev.x, ev.y)
+        goal = (float(station.x), float(station.y))
+        path = self._shortest_road_path(start, goal)
+        ev.route = [(float(ev.x), float(ev.y))] + path
+        ev.route_index = 1
+        ev.travel_distance += float(np.hypot(start[0] - ev.x, start[1] - ev.y))
+        ev.travel_distance += sum(
+            float(np.hypot(b[0] - a[0], b[1] - a[1]))
+            for a, b in zip(path[:-1], path[1:])
+        )
 
     def station_queue_size(self, station):
         return len(station.queue) + int(station.charging_ev is not None)
@@ -93,7 +153,15 @@ class EVChargingEnvironment:
                 ev.target_station = None
                 ev.completed_charges += 1
                 station.charging_ev = None
-                ev.x, ev.y = float(self.rng.uniform(5, 95)), float(self.rng.uniform(5, 95))
+                # After charging, spawn the EV on a road segment again.
+                road_edges = [(node, neighbor) for node, edges in self.road_graph.items()
+                              for neighbor, _ in edges if node < neighbor]
+                a, b = road_edges[int(self.rng.integers(0, len(road_edges)))]
+                fraction = float(self.rng.uniform(0.12, 0.88))
+                ev.x = a[0] + (b[0] - a[0]) * fraction
+                ev.y = a[1] + (b[1] - a[1]) * fraction
+                ev.route = []
+                ev.route_index = 0
 
         # Fill free chargers from their queues.
         for station in self.stations:
@@ -112,24 +180,34 @@ class EVChargingEnvironment:
             queue_size = self.station_queue_size(station)
             ev.target_station = action
             ev.state = "traveling"
-            ev.travel_distance += distance
+            self._assign_road_route(ev, station)
             rewards[ev_id] -= 0.015 * distance + 0.35 * queue_size + 0.15 * station.price
 
-        # Travel to the selected station.
+        # Follow the same road graph drawn in the Streamlit map.
         speed = 5.0
         for ev in self.evs:
             if ev.state != "traveling" or ev.target_station is None:
                 continue
-            station = self.stations[ev.target_station]
-            dx, dy = station.x - ev.x, station.y - ev.y
-            distance = float(np.hypot(dx, dy))
-            if distance <= speed:
+            remaining = speed
+            while remaining > 0 and ev.route_index < len(ev.route):
+                target_x, target_y = ev.route[ev.route_index]
+                dx, dy = target_x - ev.x, target_y - ev.y
+                distance = float(np.hypot(dx, dy))
+                if distance <= remaining + 1e-9:
+                    ev.x, ev.y = target_x, target_y
+                    remaining -= distance
+                    ev.route_index += 1
+                elif distance > 0:
+                    ev.x += remaining * dx / distance
+                    ev.y += remaining * dy / distance
+                    remaining = 0
+            if ev.route_index >= len(ev.route):
+                station = self.stations[ev.target_station]
                 ev.x, ev.y = station.x, station.y
                 ev.state = "queued"
+                ev.route = []
+                ev.route_index = 0
                 station.queue.append(ev.ev_id)
-            elif distance > 0:
-                ev.x += speed * dx / distance
-                ev.y += speed * dy / distance
 
         # Queue penalty.
         for station in self.stations:
