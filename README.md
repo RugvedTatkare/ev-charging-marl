@@ -4,7 +4,8 @@ An interactive simulation of electric vehicles selecting shared charging station
 
 ## Features
 
-- **Interactive Streamlit city simulation** with EV movement, station locations, charging queues, and live vehicle status.
+- **Road-aware Streamlit city simulation** with a shared road graph: EVs route through intersections instead of cutting diagonally across city blocks. The road network in the visualization matches the movement logic in the environment.
+- **Refined city visuals** with road surfaces, lane markings, urban blocks, station markers, route highlights, status colours, and EV hover details.
 - **Three strategies:** rule-based baseline, individual Q-Learning, and shared-reward Q-Learning.
 - **Play, pause, single-step, and run-to-end controls** for inspecting the simulation.
 - **Live metrics:** battery levels, charging cost, completed charges, waiting time, station demand, and per-EV status.
