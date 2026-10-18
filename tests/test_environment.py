@@ -13,7 +13,7 @@ class EnvironmentSmokeTests(unittest.TestCase):
         self.assertEqual(len(next_states), 6)
         self.assertEqual(len(rewards), 6)
         self.assertFalse(done)
-        self.assertEqual(info["queue_lengths"].__len__(), 3)
+        self.assertEqual(len(info["queue_lengths"]), 3)
 
     def test_done_after_max_steps(self):
         env = EVChargingEnvironment(num_evs=4, seed=11, max_steps=2)
