@@ -225,7 +225,6 @@ def build_city_figure(env: EVChargingEnvironment) -> go.Figure:
 
     ev_x = [e.x for e in env.evs]
     ev_y = [e.y for e in env.evs]
-    ev_status = [e.state for e in env.evs]
     ev_colors = [STATUS_COLORS.get(e.state, "#64748b") for e in env.evs]
     customdata = [
         [
