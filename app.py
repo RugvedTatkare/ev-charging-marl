@@ -370,17 +370,18 @@ def live_simulation() -> None:
         ):
             st.session_state.playing = not st.session_state.playing
     with controls[1]:
-        if st.button("Step once", use_container_width=True, disabled=done_local, key="step_once"):
-            st.session_state.step_once_requested = True
+        step_clicked = st.button("Step once", use_container_width=True, disabled=done_local, key="step_once")
     with controls[2]:
-        if st.button("Run to end", use_container_width=True, disabled=done_local, key="run_end"):
-            st.session_state.playing = False
-            # Run this episode to completion synchronously; the current state is retained.
-            for _ in range(env_local.max_steps - env_local.time):
-                advance_one_step()
-    if st.session_state.playing and not done_local:
+        run_to_end = st.button("Run to end", use_container_width=True, disabled=done_local, key="run_end")
+    if run_to_end:
+        st.session_state.playing = False
+        # Run this episode to completion synchronously; the current state is retained.
+        for _ in range(env_local.max_steps - env_local.time):
+            advance_one_step()
+    elif step_clicked:
+        st.session_state.playing = False
         advance_one_step()
-    elif st.session_state.pop("step_once_requested", False) and not done_local:
+    elif st.session_state.playing and not done_local:
         advance_one_step()
 
     env_local = st.session_state.env
