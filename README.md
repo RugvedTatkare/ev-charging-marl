@@ -1,8 +1,18 @@
 # EV Charging Multi-Agent Reinforcement Learning
 
-A Python simulation of electric vehicles choosing shared charging stations. It includes a rule-based baseline, independent tabular Q-Learning, a shared-reward variant, an animated city, and experiment graphs.
+An interactive simulation of electric vehicles selecting shared charging stations using a rule-based baseline and tabular Q-Learning variants.
+
+## Features
+
+- **Interactive Streamlit city simulation** with EV movement, station locations, charging queues, and live vehicle status.
+- **Three strategies:** rule-based baseline, individual Q-Learning, and shared-reward Q-Learning.
+- **Play, pause, single-step, and run-to-end controls** for inspecting the simulation.
+- **Live metrics:** battery levels, charging cost, completed charges, waiting time, station demand, and per-EV status.
+- **Downloadable run metrics** in CSV format.
+- Existing Matplotlib animation and experiment-comparison workflow remain available.
 
 ## Setup on macOS
+
 Open this folder in VS Code and use Terminal → New Terminal:
 
 ```bash
@@ -14,27 +24,42 @@ pip install -r requirements.txt
 
 In VS Code, press `Cmd+Shift+P`, choose **Python: Select Interpreter**, and select `.venv/bin/python`.
 
-## Run animation
-From the project root:
+## Launch the Streamlit app
+
+Run from the repository root:
+
+```bash
+streamlit run app.py
+```
+
+Streamlit will print a local URL, normally `http://localhost:8501`. Open it in your browser.
+
+Choose a strategy in the sidebar, set the number of EVs and episode length, then click **Start / reset simulation**. Q-Learning strategies train agents first; the training episode count controls how much experience they receive. Use Play or Step once to view the simulation, or Run to end to finish the current episode. The run's metrics can be downloaded as a CSV.
+
+## Optional: existing Matplotlib animation
 
 ```bash
 python src/main.py
 ```
 
-## Train and compare strategies
+## Run strategy experiments
+
 ```bash
 python src/experiments.py
 ```
 
-Outputs are written to `outputs/comparison.csv` and `outputs/comparison.png`.
+Experiment outputs are written to `outputs/comparison.csv` and `outputs/comparison.png`.
 
-## Model
-- 12 EV agents share 3 stations.
-- EVs have battery, location, charging state, waiting time, and charging cost.
-- State is discretized into battery bin, nearest-station distance bin, and each station's queue-size bin.
-- Actions select one of three stations.
-- Reward penalizes travel distance, congestion, and electricity cost; charging yields positive reward and queueing incurs a waiting penalty.
-- The learning update is Q(s,a) ← Q(s,a) + α[r + γ max Q(s',a') − Q(s,a)].
-- The shared-reward experiment gives all agents the mean reward from the current step.
+## Model overview
 
-All locations, prices, and battery dynamics are synthetic demonstration settings, not real infrastructure data. Independent learners in a shared environment are a practical baseline and do not guarantee optimal coordination.
+- EV agents share three charging stations.
+- Each EV has a battery, position, state, waiting time, accumulated charging cost, and completed-charge count.
+- State is discretised into a battery bin, nearest-station distance bin, and station demand bins.
+- Available actions select one of the charging stations when an idle EV's battery is at or below the decision threshold.
+- The baseline considers distance, queue / active demand, and electricity price.
+- Individual Q-Learning uses each EV's reward; shared-reward Q-Learning provides each agent the mean reward for that time step.
+- Rewards reflect travel, station demand, charging price, and queueing; charging provides positive reward.
+
+## Notes and limitations
+
+Locations, prices, and battery dynamics are synthetic demonstration settings, not real infrastructure data. Q-Learning results depend on the random seed and training duration; these experiments do not guarantee an optimal policy or real-world performance.
