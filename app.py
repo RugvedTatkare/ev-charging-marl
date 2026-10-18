@@ -369,8 +369,6 @@ def live_simulation() -> None:
             key="play_pause",
         ):
             st.session_state.playing = not st.session_state.playing
-            if st.session_state.playing and not done_local:
-                advance_one_step()
     with controls[1]:
         step_clicked = st.button("Step once", use_container_width=True, disabled=done_local, key="step_once")
     with controls[2]:
