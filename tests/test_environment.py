@@ -15,6 +15,23 @@ class EnvironmentSmokeTests(unittest.TestCase):
         self.assertFalse(done)
         self.assertEqual(len(info["queue_lengths"]), 3)
 
+
+    def test_ev_travels_on_road_segments(self):
+        env = EVChargingEnvironment(num_evs=4, seed=19, max_steps=10)
+        ev = env.evs[0]
+        ev.battery = 20.0
+        self.assertTrue(
+            any(abs(ev.x - x) < 1e-8 for x in env.road_x)
+            or any(abs(ev.y - y) < 1e-8 for y in env.road_y)
+        )
+
+        env.step({0: 0})
+        # Grid roads are horizontal or vertical; the EV must remain on one.
+        self.assertTrue(
+            any(abs(ev.x - x) < 1e-8 for x in env.road_x)
+            or any(abs(ev.y - y) < 1e-8 for y in env.road_y)
+        )
+
     def test_done_after_max_steps(self):
         env = EVChargingEnvironment(num_evs=4, seed=11, max_steps=2)
         _, _, done_first, _ = env.step({})
