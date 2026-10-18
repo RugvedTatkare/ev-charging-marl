@@ -176,46 +176,86 @@ def advance_one_step() -> None:
 
 
 def build_city_figure(env: EVChargingEnvironment) -> go.Figure:
+    """Render a stylised top-down city whose streets match the environment road graph."""
     fig = go.Figure()
 
-    # A light coordinate grid makes motion and relative station placement clear.
-    for axis_value in range(0, 101, 10):
-        fig.add_shape(
-            type="line", x0=axis_value, y0=0, x1=axis_value, y1=100,
-            line=dict(color="rgba(148,163,184,0.13)", width=1), layer="below",
-        )
-        fig.add_shape(
-            type="line", x0=0, y0=axis_value, x1=100, y1=axis_value,
-            line=dict(color="rgba(148,163,184,0.13)", width=1), layer="below",
-        )
-
-    # Show travel intent as faint lines from travelling EVs to their target.
-    for ev in env.evs:
-        if ev.state == "traveling" and ev.target_station is not None:
-            station = env.stations[ev.target_station]
-            fig.add_trace(
-                go.Scatter(
-                    x=[ev.x, station.x], y=[ev.y, station.y],
-                    mode="lines", line=dict(color="#f59e0b", width=1.5, dash="dot"),
-                    hoverinfo="skip", showlegend=False,
-                )
+    # City blocks: alternate green spaces and low-rise urban blocks.
+    block_colors = ["#e7efe7", "#e8edf0", "#edf0e5", "#e8ece7"]
+    xs, ys = env.road_x, env.road_y
+    for row in range(len(ys) - 1):
+        for col in range(len(xs) - 1):
+            x0, x1 = xs[col] + 1.8, xs[col + 1] - 1.8
+            y0, y1 = ys[row] + 1.8, ys[row + 1] - 1.8
+            color = block_colors[(row * 3 + col) % len(block_colors)]
+            # Building/park blocks remain below the street layers.
+            fig.add_shape(
+                type="rect", x0=x0, y0=y0, x1=x1, y1=y1,
+                line=dict(color="rgba(71,85,105,0.12)", width=1),
+                fillcolor=color, layer="below",
             )
+            if (row + col) % 3 == 0:
+                # Small building footprints add a little visual scale to the map.
+                bx0, bx1 = x0 + 3, x1 - 3
+                by0, by1 = y0 + 3, y1 - 3
+                fig.add_shape(
+                    type="rect", x0=bx0, y0=by0, x1=bx1, y1=by1,
+                    line=dict(color="rgba(100,116,139,0.12)", width=1),
+                    fillcolor="#d7e0e2", layer="below",
+                )
 
+    # Road surfaces and lane markings follow the exact road graph used by the environment.
+    for x in env.road_x:
+        fig.add_shape(
+            type="line", x0=x, y0=5, x1=x, y1=95,
+            line=dict(color="#94a3a8", width=11), layer="below",
+        )
+        fig.add_shape(
+            type="line", x0=x, y0=5, x1=x, y1=95,
+            line=dict(color="#f8fafc", width=1.2, dash="dash"), layer="below",
+        )
+    for y in env.road_y:
+        fig.add_shape(
+            type="line", x0=5, y0=y, x1=95, y1=y,
+            line=dict(color="#94a3a8", width=11), layer="below",
+        )
+        fig.add_shape(
+            type="line", x0=5, y0=y, x1=95, y1=y,
+            line=dict(color="#f8fafc", width=1.2, dash="dash"), layer="below",
+        )
+
+    # Highlight each active route as a clean solid route overlay on top of the roads.
+    for ev in env.evs:
+        if ev.state == "traveling" and ev.route:
+            remaining_route = [(ev.x, ev.y)] + ev.route[ev.route_index:]
+            if len(remaining_route) >= 2:
+                fig.add_trace(
+                    go.Scatter(
+                        x=[p[0] for p in remaining_route],
+                        y=[p[1] for p in remaining_route],
+                        mode="lines",
+                        line=dict(color="rgba(245,158,11,0.8)", width=3),
+                        hoverinfo="skip", showlegend=False,
+                    )
+                )
+
+    # Charging station symbols and labels.
     station_x = [s.x for s in env.stations]
     station_y = [s.y for s in env.stations]
     station_text = [
-        f"S{s.station_id} · ${s.price:.2f}/unit<br>"
-        f"Queue + charging: {env.station_queue_size(s)}"
+        f"Station {s.station_id + 1}<br>Price: {s.price:.2f} / unit"
+        f"<br>Queue: {len(s.queue)}"
+        f"<br>Charging: {'Yes' if s.charging_ev is not None else 'No'}"
         for s in env.stations
     ]
     fig.add_trace(
         go.Scatter(
             x=station_x, y=station_y, mode="markers+text",
-            text=[f"S{s.station_id}" for s in env.stations],
+            text=[f"CHARGE {s.station_id + 1}" for s in env.stations],
             textposition="top center",
+            textfont=dict(size=10, color="#134e4a", family="Inter, sans-serif"),
             marker=dict(
-                symbol="square", size=24, color="#0f766e",
-                line=dict(color="#99f6e4", width=2),
+                symbol="square", size=28, color="#0f766e",
+                line=dict(color="#ccfbf1", width=3),
             ),
             customdata=station_text,
             hovertemplate="%{customdata}<extra>Charging station</extra>",
@@ -223,33 +263,31 @@ def build_city_figure(env: EVChargingEnvironment) -> go.Figure:
         )
     )
 
-    ev_x = [e.x for e in env.evs]
-    ev_y = [e.y for e in env.evs]
     ev_colors = [STATUS_COLORS.get(e.state, "#64748b") for e in env.evs]
     customdata = [
         [
-            f"EV {e.ev_id}", e.state.title(), f"{e.battery:.1f}%",
-            f"S{e.target_station}" if e.target_station is not None else "—",
+            f"EV {e.ev_id + 1}", e.state.title(), f"{e.battery:.1f}%",
+            f"Station {e.target_station + 1}" if e.target_station is not None else "None",
             e.wait_steps, f"{e.total_cost:.2f}",
         ]
         for e in env.evs
     ]
     fig.add_trace(
         go.Scatter(
-            x=ev_x, y=ev_y, mode="markers+text",
-            text=[str(e.ev_id) for e in env.evs],
-            textposition="middle center",
-            textfont=dict(size=9, color="white"),
+            x=[e.x for e in env.evs], y=[e.y for e in env.evs],
+            mode="markers+text",
+            text=[f"⚡{e.ev_id + 1}" for e in env.evs],
+            textposition="top center",
+            textfont=dict(size=10, color="#0f172a", family="Inter, sans-serif"),
             marker=dict(
-                size=17, color=ev_colors,
-                line=dict(color="rgba(255,255,255,0.85)", width=1.2),
+                size=15, color=ev_colors, symbol="circle",
+                line=dict(color="#ffffff", width=2),
             ),
             customdata=customdata,
             hovertemplate=(
                 "<b>%{customdata[0]}</b><br>Status: %{customdata[1]}"
                 "<br>Battery: %{customdata[2]}<br>Target: %{customdata[3]}"
-                "<br>Waiting steps: %{customdata[4]}"
-                "<br>Accumulated cost: %{customdata[5]}"
+                "<br>Wait steps: %{customdata[4]}<br>Accumulated cost: %{customdata[5]}"
                 "<extra></extra>"
             ),
             name="Electric vehicles",
@@ -257,18 +295,18 @@ def build_city_figure(env: EVChargingEnvironment) -> go.Figure:
     )
 
     fig.update_layout(
-        height=520,
-        margin=dict(l=10, r=10, t=25, b=10),
+        height=650,
+        margin=dict(l=8, r=8, t=18, b=8),
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(128,128,128,0.035)",
-        font=dict(family="Inter, sans-serif", size=12),
-        xaxis=dict(range=[0, 100], title="City X", showgrid=False, zeroline=False),
+        plot_bgcolor="#f1f5f2",
+        font=dict(family="Inter, sans-serif", size=11, color="#334155"),
+        xaxis=dict(range=[3, 97], visible=False, showgrid=False, zeroline=False),
         yaxis=dict(
-            range=[0, 100], title="City Y", showgrid=False, zeroline=False,
+            range=[3, 97], visible=False, showgrid=False, zeroline=False,
             scaleanchor="x", scaleratio=1,
         ),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
         showlegend=False,
+        hoverlabel=dict(bgcolor="#0f172a", font=dict(color="#f8fafc")),
     )
     return fig
 
