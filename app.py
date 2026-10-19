@@ -357,7 +357,7 @@ with st.sidebar:
         "Training episodes (RL only)", min_value=10, max_value=150, value=50, step=10,
         help="More episodes take longer to train but give the Q-learning agents more experience.",
     )
-    start_clicked = st.button("Start / reset simulation", type="primary", use_container_width=True)
+    start_clicked = st.button("Start / reset simulation", type="primary", width="stretch")
     st.caption("The locations, prices, and battery dynamics are synthetic demonstration settings.")
 
 if start_clicked:
@@ -402,15 +402,15 @@ def live_simulation() -> None:
     with controls[0]:
         if st.button(
             "Pause" if st.session_state.playing else "Play",
-            type="primary", use_container_width=True,
+            type="primary", width="stretch",
             disabled=done_local,
             key="play_pause",
         ):
             st.session_state.playing = not st.session_state.playing
     with controls[1]:
-        step_clicked = st.button("Step once", use_container_width=True, disabled=done_local, key="step_once")
+        step_clicked = st.button("Step once", width="stretch", disabled=done_local, key="step_once")
     with controls[2]:
-        run_to_end = st.button("Run to end", use_container_width=True, disabled=done_local, key="run_end")
+        run_to_end = st.button("Run to end", width="stretch", disabled=done_local, key="run_end")
     if run_to_end:
         st.session_state.playing = False
         # Run this episode to completion synchronously; the current state is retained.
@@ -433,7 +433,7 @@ def live_simulation() -> None:
     city_col, chart_col = st.columns([1.35, 1])
     with city_col:
         st.markdown("#### City simulation")
-        st.plotly_chart(build_city_figure(env_local), use_container_width=True, key="city_map")
+        st.plotly_chart(build_city_figure(env_local), width="stretch", key="city_map")
         legend_cols = st.columns(4)
         for col, (state, color) in zip(legend_cols, STATUS_COLORS.items()):
             col.markdown(
@@ -445,7 +445,7 @@ def live_simulation() -> None:
         st.markdown("#### Live system metrics")
         st.plotly_chart(
             build_history_figure(st.session_state.metric_history),
-            use_container_width=True, key="live_metrics",
+            width="stretch", key="live_metrics",
         )
         st.markdown("#### Charging stations")
         rows = []
@@ -457,7 +457,7 @@ def live_simulation() -> None:
                 "Charging": "Yes" if station.charging_ev is not None else "No",
                 "Total demand": env_local.station_queue_size(station),
             })
-        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
 
     st.markdown("#### EV status")
     ev_rows = []
@@ -471,7 +471,7 @@ def live_simulation() -> None:
             "Completed charges": ev.completed_charges,
             "Cost": round(ev.total_cost, 2),
         })
-    st.dataframe(pd.DataFrame(ev_rows), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(ev_rows), hide_index=True, width="stretch")
 
     if summary_local["steps"] >= env_local.max_steps:
         st.success("Episode complete. Use Start / reset simulation in the sidebar to run another episode.")
