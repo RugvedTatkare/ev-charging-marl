@@ -137,6 +137,7 @@ def initialise_simulation(
     st.session_state.strategy_label = strategy_label
     st.session_state.strategy_mode = mode
     st.session_state.playing = False
+    st.session_state.run_to_end = False
     st.session_state.reward_history = []
     st.session_state.metric_history = []
     st.session_state.has_simulation = True
@@ -410,15 +411,25 @@ def live_simulation() -> None:
     with controls[1]:
         step_clicked = st.button("Step once", width="stretch", disabled=done_local, key="step_once")
     with controls[2]:
-        run_to_end = st.button("Run to end", width="stretch", disabled=done_local, key="run_end")
-    if run_to_end:
+        run_to_end_clicked = st.button(
+            "Run to end", width="stretch",
+            disabled=done_local, key="run_end"
+        )
+
+    # Advance in small batches on timed fragment reruns so the dashboard stays responsive.
+    if run_to_end_clicked:
         st.session_state.playing = False
-        # Run this episode to completion synchronously; the current state is retained.
-        for _ in range(env_local.max_steps - env_local.time):
-            advance_one_step()
+        st.session_state.run_to_end = True
     elif step_clicked:
         st.session_state.playing = False
+        st.session_state.run_to_end = False
         advance_one_step()
+    elif st.session_state.get("run_to_end", False) and not done_local:
+        for _ in range(min(10, env_local.max_steps - env_local.time)):
+            advance_one_step()
+            if st.session_state.env.time >= st.session_state.env.max_steps:
+                st.session_state.run_to_end = False
+                break
     elif st.session_state.playing and not done_local:
         advance_one_step()
 
